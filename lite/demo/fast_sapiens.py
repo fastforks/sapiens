@@ -1,4 +1,4 @@
-"""General fast inference for Sapiens-Lite dense heads (exp 007, attempt/general): body-part segmentation (seg) checkpoints
+"""General fast inference for Sapiens-Lite dense heads: body-part segmentation (seg) checkpoints
 0.3b / 0.6b / 1b / 2b from the upstream torchscript files; any batch size, any input size (multiple of 16; positional
 embedding resized bicubic like mmpretrain for sizes other than 1024x768), nothing compiled or tuned per size.
 
@@ -7,9 +7,9 @@ embedding resized bicubic like mmpretrain for sizes other than 1024x768), nothin
     logits = m(x)            # x [B,3,H,W] normalised like the lite demo (mean 123.5/116.5/103.5, std 58.5/57/57.5)
 
 Changes vs the upstream torchscript (fp32; TF32 convs): network math unchanged, precision / kernels only:
-- weights in fp16; ViT blocks with fused SDPA flash (attn="sdpa", exportable) or fastbb's prebuilt head_dim-64 flash
+- weights in fp16; ViT blocks with fused SDPA flash (attn="sdpa", exportable) or the vendored prebuilt head_dim-64 flash
   kernel (attn="fh": fp32 QK^T, fp16 PV); LayerNorm statistics in fp32 (inside F.layer_norm)
-- optional fp16-accumulation GEMMs (`gacc`) and convs / deconvs (`hacc`, fastbb.cudnn_conv cuDNN graphs, precompiled plans)
+- optional fp16-accumulation GEMMs (`gacc`) and convs / deconvs (`hacc`, vendored cudnn_conv cuDNN graphs, precompiled plans)
 - decoder (3 deconv + 3 1x1 conv, InstanceNorm + SiLU) in fp16 channels-last; InstanceNorm statistics in fp32;
   final 1x1 classifier output in fp32
 """
@@ -45,8 +45,8 @@ class FastSapiensSeg(nn.Module):
         sd = {k: v for k, v in torch.jit.load(ts_path, map_location="cpu").state_dict().items()}
         h = lambda t: t.to(device, torch.float16)  # noqa: E731
         self.attn, self.gacc, self.hacc = attn, gacc, hacc
-        if hacc:  # fp16-accumulating cuDNN conv / deconv graphs (fastbb.cudnn_conv: precompiled plans, no per-size tuning)
-            from fastbb.cudnn_conv import conv_half_acc, deconv_half_acc
+        if hacc:  # fp16-accumulating cuDNN conv / deconv graphs (vendored cudnn_conv: precompiled plans, no per-size tuning)
+            from fastbb_vendored.cudnn_conv import conv_half_acc, deconv_half_acc
             self._conv = lambda x, w, b, stride=1: conv_half_acc(x, w, b, [0, 0], [stride, stride])
             self._deconv = lambda x, w: deconv_half_acc(x, w, [1, 1], [2, 2])
         else:
@@ -75,7 +75,7 @@ class FastSapiensSeg(nn.Module):
         assert self.pos.shape[1] == self.grid0[0] * self.grid0[1]
         self._pos_cache = {}
         if attn != "sdpa":
-            from fastbb.attention import attention as fb_attention
+            from fastbb_vendored.attention import attention as fb_attention
             self._fb = fb_attention
         self.settings = f"fp16 weights, attn={attn}, gemm_acc16={gacc}, conv_acc16={hacc}, decoder fp16 channels-last, " \
                         f"fp32 InstanceNorm stats"
