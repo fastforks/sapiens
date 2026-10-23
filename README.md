@@ -1,3 +1,21 @@
+> **You are on `cuda-kernels`.** Research fork of the upstream `sapiens` repository (base `2cb0722`, 2026-10; `main` mirrors upstream). `cuda-kernels` = upstream plus custom CUDA kernels and fast paths (vendored fastbb ViT kernels). Prebuilt binaries are tied to the torch/CUDA build they were made with; the vendored fastbb cudnn-frontend paths need `pip install nvidia-cudnn-frontend`.
+>
+> Licence, as upstream (Sapiens licence, see LICENSE)
+
+RTX 5060 Ti 16 GB, torch cu130, 2026-10-23. Median of N runs after warm-up, fixed seeds. Speed-up columns: vs upstream + flags / vs upstream. Peak memory = torch peak allocated / reserved.
+
+Flags in the 'upstream + flags' row (no source change): fp16 autocast, cudnn.benchmark, TF32.
+
+| version | sapiens-1b batch 1 ms | batch 8 ms | speed-up at A (vs flags / vs upstream) | speed-up at B | peak MB at A (alloc / reserved) | startup / first call / new size | accuracy |
+|---|---|---|---|---|---|---|---|
+| upstream (torchscript fp32, TF32 convs) | 1192.6 | 10035.5 | 1.00x | 1.00x | 6956 / 7942 | not measured | reference |
+| upstream + flags (fp16 autocast, cudnn.benchmark, TF32) | 354.2 | 2793.3 | 1.00x / 3.37x | 1.00x / 3.59x | 5803 / 6344 | not measured | seg mIoU vs upstream 0.9981 (pixel agreement 0.9998) |
+| **cuda-kernels** | 189.3 | 1577.4 | 1.87x / 6.30x | 1.77x / 6.36x | 3262 / 3696 | not measured | seg mIoU vs upstream 0.9932 (TF32 alone: 0.9994) |
+
+sapiens-0.3b: upstream 466.3 / 4118.8, flags 173.1 / 1389.2, cuda-kernels 94.6 / 774.2 ms (b1 / b8); mIoU vs upstream flags 0.9968, cuda-kernels 0.9877.
+
+---
+
 <p align="center">
   <img src="./assets/sapiens_animation.gif" alt="Sapiens" title="Sapiens" width="500"/>
 </p>
